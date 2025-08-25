@@ -4,6 +4,7 @@ const express = require("express");
 const session = require("express-session");
 const passport = require("passport");
 const LocalStrategy = require('passport-local').Strategy;
+const bcrypt = require("bcryptjs");
 require("dotenv").config();
 
 const pool = new Pool(); // configured via environment variables
@@ -25,7 +26,8 @@ passport.use(
       if (!user) {
         return done(null, false, { message: "Incorrect username" });
       }
-      if (user.password !== password) {
+      const match = await bcrypt.compare(password, user.password);
+      if (!match) {
         return done(null, false, { message: "Incorrect password" });
       }
       return done(null, user);
@@ -58,10 +60,11 @@ app.get("/sign-up", (req, res) => res.render("sign-up-form"));
 
 app.post("/sign-up", async (req, res, next) => {
   try {
-    await pool.query("INSERT INTO users (username, password) VALUES ($1, $2)", [
-      req.body.username,
-      req.body.password,
-    ]);
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+    await pool.query(
+      "INSERT INTO users (username, password) VALUES ($1, $2)", 
+      [req.body.username, hashedPassword]
+    );
     res.redirect("/");
   } catch(err) {
     return next(err);
@@ -76,6 +79,14 @@ app.post(
   })
 );
 
+app.get("/log-out", (req, res, next) => {
+  req.logout((err) => {
+    if (err) {
+      return next(err);
+    }
+    res.redirect("/");
+  });
+});
 
 const PORT = 8080;
 
